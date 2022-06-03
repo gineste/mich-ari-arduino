@@ -55,3 +55,4 @@ rfPacketRx_TIRTOS/.settings/
 TIRTOS_BUILD_RELEASE/.settings/
 *.pyc
 mailbox_CC1310_LAUNCHXL_tirtos_ccs/
+docs/project/DLH-Arduino-Project/
