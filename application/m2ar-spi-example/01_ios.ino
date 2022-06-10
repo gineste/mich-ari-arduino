@@ -49,16 +49,16 @@ void initIOs()
   pinMode(6, OUTPUT); //S2LP_CSn     => Con20.14
   digitalWrite(6, 1); // Not selected MUST BE 1
   pinMode(7, INPUT_PULLUP); //S2LP_GPIO0   => Con20.10
-//  pinMode(8, OUTPUT);   // COPI=MOSI => Con20.3
+  pinMode(8, OUTPUT);   // COPI=MOSI => Con20.3
   // Set High drive strength 
-//  PORT->Group[g_APinDescription[8].ulPort].PINCFG[g_APinDescription[8].ulPin].bit.DRVSTR = 1;
-//  digitalWrite(8, 0);
-//  pinMode(9, OUTPUT);   // SPI CLOCK => Con20.11
+  PORT->Group[g_APinDescription[8].ulPort].PINCFG[g_APinDescription[8].ulPin].bit.DRVSTR = 1;
+  digitalWrite(8, 0);
+  pinMode(9, OUTPUT);   // SPI CLOCK => Con20.11
   // Set High drive strength 
-//  PORT->Group[g_APinDescription[9].ulPort].PINCFG[g_APinDescription[9].ulPin].bit.DRVSTR = 1;
-//  digitalWrite(9, 0);
+  PORT->Group[g_APinDescription[9].ulPort].PINCFG[g_APinDescription[9].ulPin].bit.DRVSTR = 1;
+  digitalWrite(9, 0);
 
-//  pinMode(10, INPUT_PULLUP);  // CIPO=MISO => Con20.7
+  pinMode(10, INPUT_PULLUP);  // CIPO=MISO => Con20.7
   pinMode(11, INPUT);  // SDA => Reconfigured at I2C init time. Force 0 to drain possible powering though IOs
   //digitalWrite(11, 0); 
   pinMode(12, INPUT);  // SCL => Reconfigured at I2C init time

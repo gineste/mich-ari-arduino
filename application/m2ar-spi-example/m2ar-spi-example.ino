@@ -1,5 +1,4 @@
-
-
+#include <CanBusMCP2515_asukiaaa.h>
 
 #include <Wire.h>
 void setup() {
@@ -17,6 +16,7 @@ void setup() {
   if(initI2CExpander())
   {
    Led2_Red();
+    setupMainCanbus();
     setupCC1310();
    Led2_Off();
   }
@@ -25,4 +25,5 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   loopCC1310();
+  loopCanbus();
 }
