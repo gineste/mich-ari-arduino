@@ -89,7 +89,7 @@ void setupCC1310(void)
 #endif
 
 #if (OUTPUT_MODE == OUTPUT_CAN)
-  sendCanbus((CAN_ADDR << 9) | CAN_CMD_DEBUG, (uint8_t*) "CC1310", 6u);
+  sendCanbus(CANBUS_PORT1, (CAN_ADDR << 9) | CAN_CMD_DEBUG, (uint8_t*) "CC1310", 6u);
 #endif
 }
 
@@ -170,10 +170,10 @@ void readCC1310(void)
     Serial.println(l_sCanTpmsInfoMsg.u8TagCnt);
     
     l_u32CanFrameId = (CAN_ADDR << 9) | CAN_CMD_TAG_INFO;
-    sendCanbus(l_u32CanFrameId, (uint8_t*) &l_sCanTpmsInfoMsg, 8u);
+    sendCanbus(CANBUS_PORT1, l_u32CanFrameId, (uint8_t*) &l_sCanTpmsInfoMsg, 8u);
     
     l_u32CanFrameId = (CAN_ADDR << 9) | CAN_CMD_TAG_DATA;
-    sendCanbus(l_u32CanFrameId, &(l_pu8Payload[3]), 8u);
+    sendCanbus(CANBUS_PORT1, l_u32CanFrameId, &(l_pu8Payload[3]), 8u);
   }
   
 #endif

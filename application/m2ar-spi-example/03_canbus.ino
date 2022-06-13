@@ -37,20 +37,22 @@ void processMasterCan(CanBusData_asukiaaa::Frame *frame) ;
 #define CAN2_PIN_INT 18
 #endif
 
+#define CANBUS_PORT0   0  // Arduino MKR Canbus shield
+#define CANBUS_PORT1   1  // Accessoire Miroobox Can 1
+#define CANBUS_PORT2   2  // Accessoire Miroobox Can 2
+
 #define CANBUS_LOOPBACK true
 #define CANBUS_REALMODE false
 
-uint8_t usePcbCan0 = 0; // Arduino MKR Canbus shield
-uint8_t usePcbCan1 = 1; // Accessoire Miroobox Can 1
-uint8_t usePcbCan2 = 1; // Accessoire Miroobox Can 2
+bool canBusAvailable[3] = {false, false, false};
 
 //BLE may receive data asynchronously. It stores data to be sent here until canbus loop is called.
 uint8_t canDataToSend = 0;
 uint8_t canDataBuffer[256];
 
-
 static const auto QUARTZ_FREQUENCY = 20UL * 1000UL * 1000UL; // 20MHz
 static const auto BITRATE = CanBusMCP2515_asukiaaa::BitRate::Kbps500;
+
 // IDS are used to send data on canbus
 #ifndef CAN0_ID
 #define CAN0_ID 3000
@@ -62,6 +64,8 @@ static const auto BITRATE = CanBusMCP2515_asukiaaa::BitRate::Kbps500;
 #define CAN2_ID 3200
 #endif
 
+typedef void (*canbusIsrHandler_t)(void);
+
 CanBusMCP2515_asukiaaa::Driver can0(CAN0_PIN_CS, CAN0_PIN_INT); // ChipsSelect, Interrupt
 CanBusMCP2515_asukiaaa::Settings can0_settings(QUARTZ_FREQUENCY, BITRATE);
 
@@ -71,21 +75,35 @@ CanBusMCP2515_asukiaaa::Settings can1_settings(QUARTZ_FREQUENCY, BITRATE);
 CanBusMCP2515_asukiaaa::Driver can2(CAN2_PIN_CS, CAN2_PIN_INT); // ChipsSelect, Interrupt
 CanBusMCP2515_asukiaaa::Settings can2_settings(QUARTZ_FREQUENCY, BITRATE);
 
+/* CAN 0 ISR function : */
+void can0IsrHandle(void)
+{
+  can0.isr();
+}
+void can1IsrHandle(void)
+{
+  can1.isr();
+}
+void can2IsrHandle(void)
+{
+  can2.isr();
+}
 
-bool connectCanbus(bool loopback, CanBusMCP2515_asukiaaa::Driver *driver, CanBusMCP2515_asukiaaa::Settings *settings)
+bool connectCanbus(bool loopback, CanBusMCP2515_asukiaaa::Driver *driver, CanBusMCP2515_asukiaaa::Settings *settings, void (*hCanBusIsrHandler)(void) )
 {
   bool res = false;
     if( loopback ){
       settings->mOperationMode = CanBusMCP2515_asukiaaa::OperationMode::LoopBack;
-      Serial.print("Canbus loopback requested ");
     }else{
       settings->mOperationMode = CanBusMCP2515_asukiaaa::OperationMode::Normal;
-      Serial.print("Canbus Normal mode requested ");
     }
     uint16_t errorCode = 0u;  
     do{
-      errorCode = driver->begin(*settings);
-      // uint16_t errorCode = can.begin(settings, [] { can.isr(); }); // attachInterrupt to INT pin
+      if(hCanBusIsrHandler)
+        errorCode = driver->begin(*settings, hCanBusIsrHandler);
+      else
+        errorCode = driver->begin(*settings);
+      
       if (errorCode == 0){
         Serial.println("Open CANBUS success");
         res = true;
@@ -97,51 +115,70 @@ bool connectCanbus(bool loopback, CanBusMCP2515_asukiaaa::Driver *driver, CanBus
 
     return res;
 }
-bool connectAllCanbus(bool loopback)
+
+
+bool initCanbusPort(uint8_t u8Port, bool boLoopMode, void (*hCanBusIsrHandler)(void) )
 {
-  bool res = true;
-  Serial.println(usePcbCan0);
-  Serial.println(usePcbCan1);
-  Serial.println(usePcbCan2);
+  CanBusMCP2515_asukiaaa::Driver * hCan;
+  CanBusMCP2515_asukiaaa::Settings * hCanSettings;
   
-  if( usePcbCan0 && res){
-    Serial.print("Try to start CAN 0 : ");
-    if( connectCanbus( loopback, &can0, &can0_settings) ){
-    }else{
-      Serial.print("FAILED ");
-      Serial.println(can0_settings.toString());
-      usePcbCan0 = 0;
-      res = false;
-    }
-  }
-  if( usePcbCan1 && res){
+  Serial.print("Try to start CAN port ");
+  Serial.print(u8Port);
+  Serial.print(" : ");
+  
+  /* select CAN port driver */
+  if(u8Port == CANBUS_PORT0)
+  {
+    hCan = &can0;
+    hCanSettings = &can0_settings;
+    
+  }else if(u8Port == CANBUS_PORT1)
+  {
+    hCan = &can1;
+    hCanSettings = &can1_settings;
     Can1_CsUnselected();
     Can1_Reset();
     delay(10);
     Can1_Run();
-    Serial.print("Starting CAN 1 : ");
-    if( connectCanbus( loopback, &can1, &can1_settings) ){
-    }else{
-      Serial.print("FAILED ");
-      Serial.println(can1_settings.toString());
-      usePcbCan1 = 0;
-      res = false;
-    }
-  }
-  if( usePcbCan2 && res){
+    
+  }else if(u8Port == CANBUS_PORT2)
+  {
+    hCan = &can2;
+    hCanSettings = &can2_settings;
     Can2_CsUnselected();
     Can2_Reset();
     delay(10);
     Can2_Run();
-    Serial.print("Starting CAN 2 : ");
-    if( connectCanbus( loopback, &can2, &can2_settings) ){
-    }else{
-      Serial.print("FAILED ");
-      Serial.println(can2_settings.toString());
-      usePcbCan2 = 0;
-      res = false;
-    }
+    
+  }else{
+    Serial.println("Unknown or unavailable CANBUS port");
+    return false;
   }
+
+  if( connectCanbus( boLoopMode, hCan, hCanSettings, hCanBusIsrHandler) ){
+    canBusAvailable[u8Port] = true;
+    Serial.println("READY");
+  }else{
+    Serial.print("FAILED ");
+    Serial.println(hCanSettings->toString());
+    canBusAvailable[u8Port] = false;
+  }
+
+  return canBusAvailable[u8Port];
+}
+
+
+bool connectAllCanbus(bool loopback)
+{
+  bool res = true;
+  if(canBusAvailable[CANBUS_PORT0])
+    res &= initCanbusPort(CANBUS_PORT0, loopback, can0IsrHandle);
+    
+  if(canBusAvailable[CANBUS_PORT1])
+    res &= initCanbusPort(CANBUS_PORT1, loopback, can1IsrHandle);
+    
+  if(canBusAvailable[CANBUS_PORT2])
+    res &= initCanbusPort(CANBUS_PORT2, loopback, can2IsrHandle);
   
   return res;
 }
@@ -150,72 +187,78 @@ bool connectAllCanbus(bool loopback)
    uint8_t i=0;
   //SPI.setClockDivider(SPI_CLOCK_DIV64);
 
+  canBusAvailable[CANBUS_PORT0] = false;
+  canBusAvailable[CANBUS_PORT1] = true;
+  canBusAvailable[CANBUS_PORT2] = false;
+
   Serial.println("Init main CANBUS v001");
-  Can1_CsUnselected();
-  Can1_Reset();
-  delay(10);
-  Can1_Run();
-  Serial.print("Starting CAN 1 : ");
-  if( connectCanbus( false, &can1, &can1_settings) ){
-  }else{
-    Serial.print("FAILED ");
-    Serial.println(can1_settings.toString());
-    usePcbCan1 = 0;
-  }
-Serial.println("Init CANBUS done.");
+  connectAllCanbus(false);
+  Serial.println("CANBUS init done.");
 }
 
 
 void loopCanbus() {
 }
 
-uint8_t sendCanbus(uint32_t canId, uint8_t *buffer8, uint8_t size)
+uint8_t sendCanbus(uint8_t u8Port, uint32_t u32FrameId, uint8_t *pu8Data, uint8_t u8DataSize)
 {
+    bool ok1 ;
+    CanBusMCP2515_asukiaaa::Driver *driver;
     CanBusData_asukiaaa::Frame frame;
-    frame.id = canId; //0x0CFE2300; //TODO : set last byte using Arduino BLE
+    
+    /* select CAN port driver */
+    if(u8Port == CANBUS_PORT0)
+    {
+      driver = &can0;
+    }else if(u8Port == CANBUS_PORT1)
+    {
+      driver = &can1;
+    }else if(u8Port == CANBUS_PORT2)
+    {
+      driver = &can2;
+    }else{
+      return 0u;
+    }
+
+    /* build can frame */
+    frame.id = u32FrameId; //0x0CFE2300; //TODO : set last byte using Arduino BLE
     frame.ext = frame.id > 2048;
+    frame.len = u8DataSize;
+    
+    Serial.print("Sending [0x");
+    Serial.print(frame.id, HEX);
+    Serial.print("] DLC= ");
+    Serial.print(frame.len);
+    Serial.print(" > ");
+    
     for(uint8_t i=0; i<8; i++){
-      if( i < size ){
-        frame.data[i] = buffer8[i];
+      if( i < u8DataSize ){
+        frame.data[i] = pu8Data[i];
       }else{
         frame.data[i] = 0;
       }
-    }
-    //frame.data64 = millis();
-    
-    bool ok1 ;
-    Serial.print(millis());
-    Serial.print(" Send ");
-    Serial.print(size);
-    Serial.print(" bytes on ");
-    if( usePcbCan0 ){
-      
-      Serial.print("CAN0>");
-      ok1 = can0.tryToSend(frame);
-    }else{
-      Serial.print("CAN1>");
-      ok1 = can1.tryToSend(frame);
-    }
-    
-    Serial.print(" [0x");
-    Serial.print(frame.id, HEX);
-    Serial.print("] ");
-    for (int i = 0; i < frame.len; ++i) {
       Serial.print(frame.data[i], HEX);
       Serial.print(":");
     }
+
+    /* Call poll function to clean can port */
+    /*driver->poll();  removed because CAN bus is initialized with Isr handler */
+    /* Send frame on selected can */
     
-    if( ok1 ){
-      can1.poll(); /* do not forget it ! */
+    ok1 = driver->tryToSend(frame);
+    
+    /* add delay to wait MCP2515 IT, otherwise messages are delayed */ 
+    /*delay(1); removed because CAN bus is initialized with Isr handler */
+    
+    /* Call poll function to manage it after sending */
+    /*driver->poll(); removed because CAN bus is initialized with Isr handler */
+
+  if(ok1)
+  {
       Serial.println(">");
-    }else{
+    return u8DataSize;
+  }else{
       Serial.println("!");
-    }
-    
-    //delay(20);
-    if( ok1 ){
-      return size;
-    }else{
-      return 0;
-    }
+    return 0;
+  }
 }
